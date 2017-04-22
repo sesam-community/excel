@@ -1,0 +1,4 @@
+Flask==0.11
+requests_ntlm
+xlrd
+
