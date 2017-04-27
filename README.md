@@ -11,6 +11,6 @@ The service tekes the following parameters:
 
 `direction = What direction the data is stored; row, og col. (Default = row)`
 
-`ids = The rows or columns containg id values, comma separated. (Default = 1)`
+`ids = The rows or columns containg id values, comma separated. (Default = row- or collumn-number)`
 
 `names = The rows or columns containg property names, comma separated. (Default = 1)`
