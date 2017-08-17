@@ -1,6 +1,8 @@
 # sesam-datasource-excel
 Sample Excel REST datasource for Sesam
 
+[![Build Status](https://travis-ci.org/sesam-community/excel.svg?branch=master)](https://travis-ci.org/sesam-community/excel)
+
 The service tekes the following parameters:
 
 `file = Full URL for the file supporting HTTP get and NTLM security`
