@@ -156,10 +156,11 @@ def requires_auth(f):
     return decorated
 
 
-@app.route('/')
+@app.route('/<path:path>', methods=["GET"])
 @requires_auth
-def get_entities():
-    file = get_var('file')
+def get_entities(path):
+
+    file = get_var('base_url')+path
     sheet = int(get_var('sheet') or 1) - 1
     ids = get_var('ids') or "0"
     ids = [int(x)-1 for x in ids.split(',')]
@@ -224,4 +225,4 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.DEBUG)
 
-    app.run(threaded=True, debug=True, host='0.0.0.0')
+    app.run(threaded=True, debug=True, host='0.0.0.0', port=int(get_var('port') or 5000))
