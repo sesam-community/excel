@@ -4,9 +4,9 @@ import xlrd
 import json
 import os
 import requests
-from requests_ntlm import HttpNtlmAuth
-from requests.auth import HTTPBasicAuth
-from requests.auth import HTTPDigestAuth
+# from requests_ntlm import HttpNtlmAuth
+# from requests.auth import HTTPBasicAuth
+# from requests.auth import HTTPDigestAuth
 
 import logging
 import threading
@@ -54,8 +54,7 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode):
                 id = str(cell.value)
         if counter>=start:
             value = to_transit_cell(cell, datemode)
-            if value:
-                rowData[columnNames[counter - start]] = value
+            rowData[columnNames[counter - start]] = value
         counter += 1
     rowData["_id"] = id or str(idx+1)
     rowData["_updated"] = lastmod
@@ -74,8 +73,7 @@ def getColData(col, rowNames, start, ids, idx, lastmod, datemode):
                 id = str(cell.value)
         if counter>=start:
             value = to_transit_cell(cell, datemode)
-            if value:
-                colData[rowNames[counter - start]] = value
+            colData[rowNames[counter - start]] = value
 
 
         counter += 1
@@ -85,6 +83,7 @@ def getColData(col, rowNames, start, ids, idx, lastmod, datemode):
 
 
 def to_transit_cell(cell, datemode):
+    logger.info("Cell type : %s" % (cell.ctype))
     value = None
     if cell.ctype in [1]:
         value = cell.value
@@ -95,10 +94,11 @@ def to_transit_cell(cell, datemode):
         py_date = datetime.datetime(year, month, day, hour, minute, second)
         value = to_transit_datetime(py_date)
     if cell.ctype == 4:
+        logger.info("Cell type Boolean with value: %s" % (cell.value))
         if cell.value == 1:
-            value = "~?t"
-        else:
-            value = "~?f"
+            value = True
+        elif cell.value == 0:
+            value = False
     return value
 
 
@@ -178,14 +178,14 @@ def get_entities():
     request_auth = None
     auth_method = get_var('auth') or "none"
 
-    if auth_method != "none":
-        auth = request.authorization
-        if auth_method == "ntlm":
-            request_auth = HttpNtlmAuth(auth.username, auth.password)
-        elif auth_method == "basic":
-            request_auth = HTTPBasicAuth(auth.username, auth.password)
-        elif auth_method == "digest":
-            request_auth = HTTPDigestAuth(auth.username, auth.password)
+    # if auth_method != "none":
+    #     auth = request.authorization
+    #     if auth_method == "ntlm":
+    #         request_auth = HttpNtlmAuth(auth.username, auth.password)
+    #     elif auth_method == "basic":
+    #         request_auth = HTTPBasicAuth(auth.username, auth.password)
+    #     elif auth_method == "digest":
+    #         request_auth = HTTPDigestAuth(auth.username, auth.password)
 
     try:
         logger.info("Reading entities...")
