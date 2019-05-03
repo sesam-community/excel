@@ -156,10 +156,11 @@ def requires_auth(f):
     return decorated
 
 
-@app.route('/')
+@app.route('/<path:path>', methods=["GET"])
 @requires_auth
-def get_entities():
-    file = get_var('file')
+def get_entities(path):
+
+    file = get_var('base_url')+path
     sheet = int(get_var('sheet') or 1) - 1
     ids = get_var('ids') or "0"
     ids = [int(x)-1 for x in ids.split(',')]
@@ -196,14 +197,22 @@ def get_entities():
         logger.debug("Got file data")
         workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
         sheetdata = []
-        if workbook.props["modified"] > since:
-            worksheet = workbook.sheet_by_index(sheet)
+        worksheet = workbook.sheet_by_index(sheet)
+        if hasattr(workbook, "props"):
+            if workbook.props["modified"] > since:
+                if direction == "row":
+                    columnNames = getColNames(worksheet, names, start)
+                    sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                else:
+                    rowNames = getRowNames(worksheet, names, start)
+                    sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
+        else:
             if direction == "row":
                 columnNames = getColNames(worksheet, names, start)
-                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, since, workbook.datemode)
             else:
                 rowNames = getRowNames(worksheet, names, start)
-                sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
+                sheetdata = getSheetColData(worksheet, rowNames, start, ids, since, workbook.datemode)
 
         return Response(json.dumps(sheetdata), mimetype='application/json')
 
@@ -224,4 +233,4 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.DEBUG)
 
-    app.run(threaded=True, debug=True, host='0.0.0.0')
+    app.run(threaded=True, debug=True, host='0.0.0.0', port=int(get_var('port') or 5000))
