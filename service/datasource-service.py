@@ -197,14 +197,22 @@ def get_entities(path):
         logger.debug("Got file data")
         workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
         sheetdata = []
-        if workbook.props["modified"] > since:
-            worksheet = workbook.sheet_by_index(sheet)
+        worksheet = workbook.sheet_by_index(sheet)
+        if hasattr(workbook, "props"):
+            if workbook.props["modified"] > since:
+                if direction == "row":
+                    columnNames = getColNames(worksheet, names, start)
+                    sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                else:
+                    rowNames = getRowNames(worksheet, names, start)
+                    sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
+        else:
             if direction == "row":
                 columnNames = getColNames(worksheet, names, start)
-                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, since, workbook.datemode)
             else:
                 rowNames = getRowNames(worksheet, names, start)
-                sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
+                sheetdata = getSheetColData(worksheet, rowNames, start, ids, since, workbook.datemode)
 
         return Response(json.dumps(sheetdata), mimetype='application/json')
 
