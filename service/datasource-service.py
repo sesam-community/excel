@@ -21,6 +21,20 @@ logger = None
 _lock_config = threading.Lock()
 
 
+required_env_vars = ['file_url', 'client_secret', 'tenant_id']
+missing_env_vars = list()
+
+## Helper functions
+def check_env_variables(required_env_vars, missing_env_vars):
+    for env_var in required_env_vars:
+        value = os.getenv(env_var)
+        if not value:
+            missing_env_vars.append(env_var)
+
+    if len(missing_env_vars) != 0:
+        app.logger.error(f"Missing the following required environment variable(s) {missing_env_vars}")
+        sys.exit(1)
+
 def datetime_format(dt):
     return '%04d' % dt.year + dt.strftime("-%m-%dT%H:%M:%SZ")
 
@@ -104,25 +118,25 @@ def to_transit_cell(cell, datemode):
 
 def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode):
     nRows = sheet.nrows
-    sheetData = []
+
 
     for idx in range(start[1], nRows):
         row = sheet.row(idx)
         rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode)
-        sheetData.append(rowData)
+        yield rowData
 
-    return sheetData
+
 
 def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode):
     nCols = sheet.row_len(start[0])
-    sheetData = []
+
 
     for idx in range(start[0], nCols):
         col = sheet.col(idx)
         colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode)
-        sheetData.append(colData)
+        yield colData
 
-    return sheetData
+
 
 def get_var(var):
     envvar = None
@@ -200,7 +214,8 @@ def get_entities():
             worksheet = workbook.sheet_by_index(sheet)
             if direction == "row":
                 columnNames = getColNames(worksheet, names, start)
-                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                for data in getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
+                    yield Response(stream_as_json(data) mimetype = 'application/json')
             else:
                 rowNames = getRowNames(worksheet, names, start)
                 sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
