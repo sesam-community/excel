@@ -7,6 +7,8 @@ import requests
 # from requests_ntlm import HttpNtlmAuth
 # from requests.auth import HTTPBasicAuth
 # from requests.auth import HTTPDigestAuth
+from filehandling import get_file_by_row, get_file_by_col
+
 
 import logging
 import threading
@@ -42,110 +44,32 @@ def datetime_format(dt):
 def to_transit_datetime(dt_int):
     return "~t" + datetime_format(dt_int)
 
+def stream_as_json(generator_function):
+    """
+    Stream list of objects as JSON array
+    :param generator_function:
+    :return:
+    """
+    first = True
 
-def getColNames(sheet,names,start):
-    rowSize = max([sheet.row_len(rowstart) for rowstart in names])
-    rowValues = [sheet.row_values(x, start[0], rowSize) for x in names]
-    return  ['-'.join(row) for row in map(lambda *a: list(a), *rowValues)]
+    yield '['
 
+    for item in generator_function:
+        if not first:
+            print(",")
+            yield ','
+        else:
+            first = False
+        print(item)
+        print(type(item))
+        yield json.dumps(item)
 
-def getRowNames(sheet,names,start):
-    colValues = [sheet.col_values(x, start[1], sheet.nrows) for x in names]
-    return  ['-'.join(row) for row in map(lambda *a: list(a), *colValues)]
-
-
-
-def getRowData(row, columnNames, start, ids, idx, lastmod, datemode):
-    rowData = {}
-    counter = 0
-    id = None
-
-    for cell in row:
-        if counter in ids:
-            if id:
-                id = id + "-" + str(cell.value, datemode)
-            else:
-                id = str(cell.value)
-        if counter>=start:
-            value = to_transit_cell(cell, datemode)
-            rowData[columnNames[counter - start]] = value
-        counter += 1
-    rowData["_id"] = id or str(idx+1)
-    rowData["_updated"] = lastmod
-    return rowData
-
-def getColData(col, rowNames, start, ids, idx, lastmod, datemode):
-    colData = {}
-    counter = 0
-    id = None
-
-    for cell in col:
-        if counter in ids:
-            if id:
-                id = id + "-" + str(cell.value)
-            else:
-                id = str(cell.value)
-        if counter>=start:
-            value = to_transit_cell(cell, datemode)
-            colData[rowNames[counter - start]] = value
-
-
-        counter += 1
-    colData["_id"] = id or str(idx)+1
-    colData["_updated"] = lastmod
-    return colData
-
-
-def to_transit_cell(cell, datemode):
-    logger.info("Cell type : %s" % (cell.ctype))
-    value = None
-    if cell.ctype in [1]:
-        value = cell.value
-    if cell.ctype in [2]:
-        value = "~f" + str(cell.value)
-    if cell.ctype == 3:
-        year, month, day, hour, minute, second = xlrd.xldate_as_tuple(cell.value, datemode)
-        py_date = datetime.datetime(year, month, day, hour, minute, second)
-        value = to_transit_datetime(py_date)
-    if cell.ctype == 4:
-        logger.info("Cell type Boolean with value: %s" % (cell.value))
-        if cell.value == 1:
-            value = True
-        elif cell.value == 0:
-            value = False
-    return value
-
-
-def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode):
-    nRows = sheet.nrows
-
-
-    for idx in range(start[1], nRows):
-        row = sheet.row(idx)
-        rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode)
-        yield rowData
+    yield ']'
 
 
 
-def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode):
-    nCols = sheet.row_len(start[0])
 
 
-    for idx in range(start[0], nCols):
-        col = sheet.col(idx)
-        colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode)
-        yield colData
-
-
-
-def get_var(var):
-    envvar = None
-    if var.upper() in os.environ:
-        envvar = os.environ[var.upper()]
-    else:
-        envvar = request.args.get(var)
-    logger.info("Setting %s = %s" % (var, envvar))
-    return envvar
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""
@@ -158,7 +82,7 @@ def authenticate():
 def requires_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_method = get_var('auth') or "none"
+        auth_method = "none"
         if auth_method != "none":
             auth = request.authorization
             if not auth:
@@ -173,24 +97,18 @@ def requires_auth(f):
 @app.route('/')
 @requires_auth
 def get_entities():
-    file = get_var('file')
-    sheet = int(get_var('sheet') or 1) - 1
-    ids = get_var('ids') or "0"
+    
+    fileUrl = "https://www.bring.no/radgivning/sende-noe/adressetjenester/postnummer/_/attachment/download/c0300459-6555-4833-b42c-4b16496b7cc0:1127fa77303a0347c45d609069d1483b429a36c0/Postnummerregister-Excel.xlsx"## get_var('file')
+    ids = "0"
     ids = [int(x)-1 for x in ids.split(',')]
-    names = get_var('names') or "1"
+    print(ids)
+    names = "1"
     names = [int(x)-1 for x in names.split(',')]
-    direction = get_var('direction') or "row"
-    start = get_var('start')
-    if not start and direction=="row":
-        start="1,2"
-    elif not start:
-        start = "2,1"
+    start = "2,1"
     start = [int(x)-1 for x in start.split(',')]
-    logger.info("Get %s using request: %s" % (file, request.url))
-    since = request.args.get('since') or "0001-01-01"
+    #logger.info("Get %s using request: %s" % (fileUrl, request.url))
+    since = "0001-01-01"
 
-    request_auth = None
-    auth_method = get_var('auth') or "none"
 
     # if auth_method != "none":
     #     auth = request.authorization
@@ -200,32 +118,12 @@ def get_entities():
     #         request_auth = HTTPBasicAuth(auth.username, auth.password)
     #     elif auth_method == "digest":
     #         request_auth = HTTPDigestAuth(auth.username, auth.password)
+    print(get_file_by_row(fileUrl, ids, names, start, since))
 
-    try:
-        logger.info("Reading entities...")
+    return Response(stream_as_json(get_file_by_row(fileUrl, ids, names, start, since)))
 
-        logger.info("Reading file: %s" % (file))
-        r = requests.get(file, auth=request_auth)
-        r.raise_for_status()
-        logger.debug("Got file data")
-        workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
-        sheetdata = []
-        if workbook.props["modified"] > since:
-            worksheet = workbook.sheet_by_index(sheet)
-            if direction == "row":
-                columnNames = getColNames(worksheet, names, start)
-                for data in getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
-                    yield Response(stream_as_json(data) mimetype = 'application/json')
-            else:
-                rowNames = getRowNames(worksheet, names, start)
-                sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
-
-        return Response(json.dumps(sheetdata), mimetype='application/json')
-
-    except BaseException as e:
-        logger.exception("Failed to read entities!")
-        return Response(status=500, response="An error occured during generation of entities: %s" )
-
+def create_response(fileUrl, ids, names, start, since):
+    yield from stream_as_json(get_file_by_row(fileUrl, ids, names, start, since))
 
 if __name__ == '__main__':
     # Set up logging
@@ -239,4 +137,4 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.DEBUG)
 
-    app.run(threaded=True, debug=True, host='0.0.0.0')
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
