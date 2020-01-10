@@ -56,12 +56,9 @@ def stream_as_json(generator_function):
 
     for item in generator_function:
         if not first:
-            print(",")
             yield ','
         else:
             first = False
-        print(item)
-        print(type(item))
         yield json.dumps(item)
 
     yield ']'
@@ -94,21 +91,22 @@ def requires_auth(f):
     return decorated
 
 
-@app.route('/')
+@app.route('/',methods=['GET', 'POST'])
 @requires_auth
 def get_entities():
-    
+    request_data = request.get_data()
+    print(json.loads(str(request_data.decode("utf-8"))))
     fileUrl = "https://www.bring.no/radgivning/sende-noe/adressetjenester/postnummer/_/attachment/download/c0300459-6555-4833-b42c-4b16496b7cc0:1127fa77303a0347c45d609069d1483b429a36c0/Postnummerregister-Excel.xlsx"## get_var('file')
     ids = "0"
     ids = [int(x)-1 for x in ids.split(',')]
-    print(ids)
+
     names = "1"
     names = [int(x)-1 for x in names.split(',')]
     start = "2,1"
     start = [int(x)-1 for x in start.split(',')]
     #logger.info("Get %s using request: %s" % (fileUrl, request.url))
     since = "0001-01-01"
-
+    print(ids,names,start)
 
     # if auth_method != "none":
     #     auth = request.authorization
@@ -118,8 +116,6 @@ def get_entities():
     #         request_auth = HTTPBasicAuth(auth.username, auth.password)
     #     elif auth_method == "digest":
     #         request_auth = HTTPDigestAuth(auth.username, auth.password)
-    print(get_file_by_row(fileUrl, ids, names, start, since))
-
     return Response(stream_as_json(get_file_by_row(fileUrl, ids, names, start, since)))
 
 def create_response(fileUrl, ids, names, start, since):
