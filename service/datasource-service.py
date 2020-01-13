@@ -7,7 +7,7 @@ import requests
 # from requests_ntlm import HttpNtlmAuth
 # from requests.auth import HTTPBasicAuth
 # from requests.auth import HTTPDigestAuth
-from filehandling import get_file_by_row, get_file_by_col
+from filehandling import get_file_by_row, get_file_by_col, valid_request
 
 
 import logging
@@ -23,8 +23,9 @@ logger = None
 _lock_config = threading.Lock()
 
 
-required_env_vars = ['file_url', 'client_secret', 'tenant_id']
-missing_env_vars = list()
+requiredVars = ['file_url']
+optionalVars = ['sheet', 'start','direction','names','ids','since']
+
 
 ## Helper functions
 def check_env_variables(required_env_vars, missing_env_vars):
@@ -94,29 +95,25 @@ def requires_auth(f):
 @app.route('/',methods=['GET', 'POST'])
 @requires_auth
 def get_entities():
-    request_data = request.get_data()
-    print(json.loads(str(request_data.decode("utf-8"))))
-    fileUrl = "https://www.bring.no/radgivning/sende-noe/adressetjenester/postnummer/_/attachment/download/c0300459-6555-4833-b42c-4b16496b7cc0:1127fa77303a0347c45d609069d1483b429a36c0/Postnummerregister-Excel.xlsx"## get_var('file')
-    ids = "0"
-    ids = [int(x)-1 for x in ids.split(',')]
+    requestData = json.loads(str(request.get_data().decode("utf-8")))[0]
+    if valid_request(requestData, requiredVars, optionalVars):
+        file_url = requestData.get("file_url")
+        ids = requestData.get("ids") or "0"
+            ids = [int(x)-1 for x in ids.split(',')]
 
-    names = "1"
-    names = [int(x)-1 for x in names.split(',')]
-    start = "2,1"
-    start = [int(x)-1 for x in start.split(',')]
-    #logger.info("Get %s using request: %s" % (fileUrl, request.url))
-    since = "0001-01-01"
-    print(ids,names,start)
+        names = requestData.get("ids") or "1"
+        names = [int(x)-1 for x in names.split(',')]
+        start = requestData.get("start") or "2,1"
+        start = [int(x)-1 for x in start.split(',')]
+        logger.info("Get %s using request: %s" % (file_url, request.url))
+        since = requestData.get("since") or "0001-01-01"
+        if requestData.get("direction") == "col":
+            return Response(stream_as_json(get_file_by_col(file_url, ids, names, start, since)))
+        else:
+            return Response(stream_as_json(get_file_by_row(file_url, ids, names, start, since)))
+    else:
+        return("400")
 
-    # if auth_method != "none":
-    #     auth = request.authorization
-    #     if auth_method == "ntlm":
-    #         request_auth = HttpNtlmAuth(auth.username, auth.password)
-    #     elif auth_method == "basic":
-    #         request_auth = HTTPBasicAuth(auth.username, auth.password)
-    #     elif auth_method == "digest":
-    #         request_auth = HTTPDigestAuth(auth.username, auth.password)
-    return Response(stream_as_json(get_file_by_row(fileUrl, ids, names, start, since)))
 
 def create_response(fileUrl, ids, names, start, since):
     yield from stream_as_json(get_file_by_row(fileUrl, ids, names, start, since))
