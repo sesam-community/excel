@@ -1,24 +1,26 @@
 from functools import wraps
-from flask import Flask, request, Response, abort
-import xlrd
+from flask import Flask, request, Response,abort
+
 import json
-import os
-import requests
-# from requests_ntlm import HttpNtlmAuth
-# from requests.auth import HTTPBasicAuth
-# from requests.auth import HTTPDigestAuth
 from filehandling import get_file_by_row, get_file_by_col, valid_request
 
 
 import logging
 import threading
-import datetime
+import os
 
 app = Flask(__name__)
 config = {}
 config_since = None
 
 logger = None
+format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logger = logging.getLogger('excelms')
+# Log to stdout
+stdout_handler = logging.StreamHandler()
+stdout_handler.setFormatter(logging.Formatter(format_string))
+logger.addHandler(stdout_handler)
+logger.setLevel(logging.getLevelName(os.environ.get('log_level', 'DEBUG')))
 
 _lock_config = threading.Lock()
 
@@ -28,15 +30,16 @@ optionalVars = ['sheet', 'start','direction','names','ids','since']
 
 
 ## Helper functions
-def check_env_variables(required_env_vars, missing_env_vars):
-    for env_var in required_env_vars:
-        value = os.getenv(env_var)
-        if not value:
-            missing_env_vars.append(env_var)
 
-    if len(missing_env_vars) != 0:
-        app.logger.error(f"Missing the following required environment variable(s) {missing_env_vars}")
-        sys.exit(1)
+# def check_env_variables(required_env_vars, missing_env_vars):
+#     for env_var in required_env_vars:
+#         value = os.getenv(env_var)
+#         if not value:
+#             missing_env_vars.append(env_var)
+#
+#     if len(missing_env_vars) != 0:
+#         app.logger.error(f"Missing the following required environment variable(s) {missing_env_vars}")
+#         sys.exit(1)
 
 def datetime_format(dt):
     return '%04d' % dt.year + dt.strftime("-%m-%dT%H:%M:%SZ")
@@ -92,25 +95,25 @@ def requires_auth(f):
     return decorated
 
 
-@app.route('/',methods=['GET', 'POST'])
+@app.route('/<string:url>',methods=['GET', 'POST'])
 @requires_auth
-def get_entities():
+def get_entities(file_url):
+    logger.debug("Start", file_url)
+    print("start", file_url)
     requestData = json.loads(str(request.get_data().decode("utf-8")))[0]
+    logger.debug(requestData)
+    print(requestData)
     if valid_request(requestData, requiredVars, optionalVars):
-        file_url = requestData.get("file_url")
-        ids = requestData.get("ids") or "0"
-            ids = [int(x)-1 for x in ids.split(',')]
-
-        names = requestData.get("ids") or "1"
-        names = [int(x)-1 for x in names.split(',')]
-        start = requestData.get("start") or "2,1"
-        start = [int(x)-1 for x in start.split(',')]
+        ids = requestData.get("ids") or ["-1"]
+        names = requestData.get("names") or [0]
+        start = requestData.get("start") or {"row" : 1, "col": 0}
+        sheets = requestData.get("sheets")
         logger.info("Get %s using request: %s" % (file_url, request.url))
         since = requestData.get("since") or "0001-01-01"
         if requestData.get("direction") == "col":
-            return Response(stream_as_json(get_file_by_col(file_url, ids, names, start, since)))
+            return Response(stream_as_json(get_file_by_col(file_url, ids, names, start, since,sheets)))
         else:
-            return Response(stream_as_json(get_file_by_row(file_url, ids, names, start, since)))
+            return Response(stream_as_json(get_file_by_row(file_url, ids, names, start, since,sheets)))
     else:
         return("400")
 
@@ -120,14 +123,6 @@ def create_response(fileUrl, ids, names, start, since):
 
 if __name__ == '__main__':
     # Set up logging
-    format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logger = logging.getLogger('sharepoint-microservice')
 
-    # Log to stdout
-    stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(logging.Formatter(format_string))
-    logger.addHandler(stdout_handler)
-
-    logger.setLevel(logging.DEBUG)
 
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
