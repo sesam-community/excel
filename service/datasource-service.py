@@ -18,7 +18,7 @@ _lock_config = threading.Lock()
 
 requiredVars = ['file_url']
 optionalVars = ['sheet', 'start','direction','names','ids','since']
-
+logger.info(f"------Starting MS------- {requiredVars}")
 
 ## Helper functions
 
@@ -85,10 +85,14 @@ def requires_auth(f):
     return decorated
 
 
-@app.route('/<path:file_url>',methods=['GET', 'POST'])
+@app.route("/get_excel", methods=["GET", "POST"])
 @requires_auth
-def get_entities(file_url):
-    logger.info("Get _ enteties")
+def get_entities():
+    logger.info("------Starting app-------")
+    file_url = request.args.get("file_url")
+    if not file_url:
+        logger.error(f"No file_url specified, stopping service")
+        return ("404")
     ids = request.args.get("ids") or "-1"
     ids = [int(x) for x in ids.split(',')]
     names = request.args.get("names") or "0"
@@ -96,17 +100,19 @@ def get_entities(file_url):
     start = request.args.get("start") or {"row" : 1, "col": 0}
     sheets = request.args.get("sheets")
     since = request.args.get("since") or "0001-01-01"
+    request_auth = None
+    auth_method = get_var('auth') or "none"
+    logger.debug(f"variables set: file_url = {file_url} names = {names} ids =  {ids} start = {start} since = {since} sheets = {sheets}")
     if request.args.get("direction") == "col":
-        logger.info("col")
-        return Response(stream_as_json(stream_file_by_col(file_url, ids, names, start, since,sheets)))
+        logger.info("calling stream by col")
+        return Response(stream_as_json(stream_file_by_col(file_url, ids, names, start, since,sheets,request_auth)))
     else:
-        logger.info("row")
-        return Response(stream_as_json(stream_file_by_row(file_url, ids, names, start, since,sheets)))
+        logger.info("calling stream by row")
+    return Response(stream_as_json(stream_file_by_row(file_url, ids, names, start, since,sheets,request_auth)))
 
 
 
 if __name__ == '__main__':
     # Set up logging
-
 
     app.run(threaded=True, debug=True, host='0.0.0.0')

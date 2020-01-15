@@ -4,17 +4,21 @@ import requests
 import logging
 import datetime
 
+
 logger = logging.getLogger('datasource-service.filehandling')
-def stream_file_by_row(file_url,ids,names,start,since,sheets):
+def stream_file_by_row(file_url,ids,names,start,since,sheets,request_auth):
     """
     opens the workbook on_demand, one sheet at a time and releases each sheet after reading
     itterates over each sheet, store a sheet id and sheet names - names of colums
     yields a row at a time with sheet_id, sheet_name as a list
 
     """
-    logger.info("stream file by row")
-    r = requests.get(file_url, auth=None)
-    r.raise_for_status()
+    try:
+        r = requests.get(file_url, auth=request_auth)
+        r.raise_for_status()
+    except:
+        logger.error(f"Request.get failed")
+        return ("get file failed")
     with xlrd.open_workbook("sesam.xsls", file_contents=r.content, on_demand=True) as Workbook:
         try:
             if Workbook.props["modified"] > since:
@@ -33,9 +37,8 @@ def stream_file_by_row(file_url,ids,names,start,since,sheets):
             Workbook.release_resources()
             logger.info("releasing resources due to error")
 
-def stream_file_by_col(file_url,ids,names,start,since,sheets):
-    logging.info("stream file by col")
-    r = requests.get(file_url, auth=None)
+def stream_file_by_col(file_url,ids,names,start,since,sheets,request_auth):
+    r = requests.get(file_url, auth=request_auth)
     r.raise_for_status()
     with xlrd.open_workbook("sesm.xsls", file_contents=r.content, on_demand=True) as Workbook:
         try:
