@@ -4,9 +4,15 @@ Sample Excel REST datasource for Sesam
 [![Build Status](https://travis-ci.org/sesam-community/excel.svg?branch=master)](https://travis-ci.org/sesam-community/excel)
 
 The service takes the following parameters:
+<<<<<<< HEAD
 app.route is set to /get_excel and all parameters is added in pipe after the query string set in url file_url is required
 ex in pipe config:
 `"url": "get_excel?file_url=<file_url>"
+=======
+`app.route is set to /get_excel and all parameters is added in pipe after the query string set in url file_url is required
+ex in pipe config:
+"url": "get_excel?file_url=<file_url>"
+>>>>>>> dc1f370c0894643da1158e53e00be66f853d813e
   },`
 `file_url = Full URL for the file supporting HTTP get and NTLM security, currently auth is set to None`
 
