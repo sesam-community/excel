@@ -4,49 +4,55 @@ import requests
 import logging
 import datetime
 
-logging = logging.getLogger('filehandling')
-def get_file_by_row(file_url,ids,names,start,since,sheets):
+logger = logging.getLogger('datasource-service.filehandling')
+def stream_file_by_row(file_url,ids,names,start,since,sheets):
     """
     opens the workbook on_demand, one sheet at a time and releases each sheet after reading
     itterates over each sheet, store a sheet id and sheet names - names of colums
     yields a row at a time with sheet_id, sheet_name as a list
 
     """
-    logging.info("get file by row")
+    logger.info("stream file by row")
     r = requests.get(file_url, auth=None)
     r.raise_for_status()
     with xlrd.open_workbook("sesam.xsls", file_contents=r.content, on_demand=True) as Workbook:
         try:
             if Workbook.props["modified"] > since:
                 for sheet in sheets or range(0,Workbook.nsheets):
-                    logging.debug("opening sheet: ", sheet)
+                    logger.info("opening sheet: %s", sheet)
                     workSheet = Workbook.sheet_by_index(sheet)
-                    sheetNames = get_col_names(workSheet,names,start["col"])
+                    colNames = get_col_names(workSheet,names,start["col"])
+                    logger.debug("got names of col: %s", colNames)
                     for row in range(start["row"],workSheet.nrows):
-                        yield get_row_data(workSheet.row(row), sheetNames, ids, row, Workbook.props["modified"],  Workbook.datemode,sheet)
+                        yield get_row_data(workSheet.row(row), colNames, ids, row, Workbook.props["modified"],  Workbook.datemode,sheet)
                     Workbook.unload_sheet(sheet)
             Workbook.release_resources()
+            logger.info("Finished reading releasing resources")
         except Exception as e:
-            logging.error("Failed when opening workbook, error -", {e})
+            logger.error(f"Failed to open workbook. Error: {e}")
             Workbook.release_resources()
+            logger.info("releasing resources due to error")
 
-def get_file_by_col(file_url,ids,names,start,since,sheets):
-    logging.info("get file by col")
+def stream_file_by_col(file_url,ids,names,start,since,sheets):
+    logging.info("stream file by col")
     r = requests.get(file_url, auth=None)
     r.raise_for_status()
     with xlrd.open_workbook("sesm.xsls", file_contents=r.content, on_demand=True) as Workbook:
         try:
             if Workbook.props["modified"] > since:
                 for sheet in sheets or range(0,Workbook.nsheets):
-                    logging.debug("opening sheet: ", sheet)
+                    logger.info("opening sheet: %s", sheet)
                     workSheet = Workbook.sheet_by_index(sheet)
-                    sheetNames = get_row_names(workSheet,names,start["row"])
+                    rowNames = get_row_names(workSheet,names,start["row"])
+                    logger.debug("got names of rows: %s", rowNames)
                     for col in range(start["col"],workSheet.ncols):
-                        yield get_col_data(workSheet.col(col), sheetNames, start["col"], ids, col,Workbook.props["modified"],  Workbook.datemode,sheet)
+                        yield get_col_data(workSheet.col(col), rowNames, start["col"], ids, col,Workbook.props["modified"],  Workbook.datemode,sheet)
                     Workbook.unload_sheet(sheet)
+                    logger.info("Finished reading releasing resources")
         except:
-            logging.error("Error in opening workbook, error - " ,{e})
+            logger.error(f"Failed to open workbook. Error: {e}")
             Workbook.release_resources()
+            logger.info("releasing resources due to error")
 
 def get_col_names(workSheet,names,start):
     """
@@ -59,14 +65,12 @@ def get_col_names(workSheet,names,start):
 
 def get_row_names(sheet,names,start):
     colValues = [sheet.col_values(x, start, sheet.nrows) for x in names]
-    print(colValues)
     return  colValues[0]
 
 
 
 def get_row_data(row, columnNames, ids, col,lastmod,  datemode,sheet):
     rowData={}
-
     id = None
     counter=0
     for cell in row:
@@ -77,6 +81,7 @@ def get_row_data(row, columnNames, ids, col,lastmod,  datemode,sheet):
                 id = str(cell.value)
         value = to_transit_cell(cell, datemode)
         rowData[columnNames[counter]] = value
+
         counter += 1
     rowData["_id"] =  set_id(id,col,sheet)
     rowData["_updated"] = lastmod
@@ -166,7 +171,7 @@ def valid_request(requestData,requiredVars,optionalVars):
             if start.get("row") != None and start.get("col") != None:
                 pass
             else:
-                logging.error("row or col not defined in start")
+                logger.error("row or col not defined in start")
                 return False
     for var in requestData:
         if var in requiredVars:
@@ -174,9 +179,9 @@ def valid_request(requestData,requiredVars,optionalVars):
         elif var in optionalVars:
             pass
         else:
-            logging.error("variable, {var},  not known ")
+            logger.error("variable, {var},  not known ")
     if required >= len(requiredVars):
         return True
     else:
-        logging.error("Missing required Variable")
+        logger.error("Missing required Variable")
         return False

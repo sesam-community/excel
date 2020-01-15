@@ -2,7 +2,7 @@ from functools import wraps
 from flask import Flask, request, Response,abort
 
 import json
-from filehandling import get_file_by_row, get_file_by_col, valid_request
+from filehandling import stream_file_by_row, stream_file_by_col
 
 
 import logging
@@ -10,20 +10,11 @@ import threading
 import os
 
 app = Flask(__name__)
-config = {}
-config_since = None
+
 
 logger = None
-format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-logger = logging.getLogger('excelms')
-# Log to stdout
-stdout_handler = logging.StreamHandler()
-stdout_handler.setFormatter(logging.Formatter(format_string))
-logger.addHandler(stdout_handler)
-logger.setLevel(logging.getLevelName(os.environ.get('log_level', 'DEBUG')))
 
 _lock_config = threading.Lock()
-
 
 requiredVars = ['file_url']
 optionalVars = ['sheet', 'start','direction','names','ids','since']
@@ -91,38 +82,39 @@ def requires_auth(f):
             return f(*args, **kwargs)
         else:
             return f(*args, **kwargs)
-
     return decorated
 
 
-@app.route('/<string:url>',methods=['GET', 'POST'])
+@app.route('/<path:file_url>',methods=['GET', 'POST'])
 @requires_auth
 def get_entities(file_url):
-    logger.debug("Start", file_url)
-    print("start", file_url)
-    requestData = json.loads(str(request.get_data().decode("utf-8")))[0]
-    logger.debug(requestData)
-    print(requestData)
-    if valid_request(requestData, requiredVars, optionalVars):
-        ids = requestData.get("ids") or ["-1"]
-        names = requestData.get("names") or [0]
-        start = requestData.get("start") or {"row" : 1, "col": 0}
-        sheets = requestData.get("sheets")
-        logger.info("Get %s using request: %s" % (file_url, request.url))
-        since = requestData.get("since") or "0001-01-01"
-        if requestData.get("direction") == "col":
-            return Response(stream_as_json(get_file_by_col(file_url, ids, names, start, since,sheets)))
-        else:
-            return Response(stream_as_json(get_file_by_row(file_url, ids, names, start, since,sheets)))
+    logger.info("Get _ enteties")
+    ids = request.args.get("ids") or "-1"
+    ids = [int(x) for x in ids.split(',')]
+    names = request.args.get("names") or "0"
+    names = [int(x) for x in names.split(',')]
+    start = request.args.get("start") or {"row" : 1, "col": 0}
+    sheets = request.args.get("sheets")
+    since = request.args.get("since") or "0001-01-01"
+    if request.args.get("direction") == "col":
+        logger.info("col")
+        return Response(stream_as_json(stream_file_by_col(file_url, ids, names, start, since,sheets)))
     else:
-        return("400")
+        logger.info("row")
+        return Response(stream_as_json(stream_file_by_row(file_url, ids, names, start, since,sheets)))
 
 
-def create_response(fileUrl, ids, names, start, since):
-    yield from stream_as_json(get_file_by_row(fileUrl, ids, names, start, since))
 
 if __name__ == '__main__':
     # Set up logging
+    format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logger = logging.getLogger('datasource-service')
 
+    # Log to stdout
+    stdout_handler = logging.StreamHandler()
+    stdout_handler.setFormatter(logging.Formatter(format_string))
+    logger.addHandler(stdout_handler)
 
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    logger.setLevel(logging.DEBUG)
+
+    app.run(threaded=True, debug=True, host='0.0.0.0')
