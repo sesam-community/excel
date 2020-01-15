@@ -5,7 +5,7 @@ Sample Excel REST datasource for Sesam
 
 [![Build Status](https://travis-ci.org/sesam-community/excel.svg?branch=master)](https://travis-ci.org/sesam-community/excel)
 
-_id is set as "<row_number> - <sheet_nr>"
+_id is set as "<row_number> - <sheet_nr>" example id: excel:5093-0
 all sheets/row/col are 0 indexed. 
 
 The service takes the following parameters:
