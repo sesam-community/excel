@@ -3,16 +3,16 @@ from flask import Flask, request, Response,abort
 
 import json
 from filehandling import stream_file_by_row, stream_file_by_col
+from sesamutils import sesam_logger
 
 
-import logging
 import threading
 import os
 
 app = Flask(__name__)
 
 
-logger = None
+logger = sesam_logger("datasource-service", app=app)
 
 _lock_config = threading.Lock()
 
@@ -107,14 +107,6 @@ def get_entities(file_url):
 
 if __name__ == '__main__':
     # Set up logging
-    format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logger = logging.getLogger('datasource-service')
 
-    # Log to stdout
-    stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(logging.Formatter(format_string))
-    logger.addHandler(stdout_handler)
-
-    logger.setLevel(logging.DEBUG)
 
     app.run(threaded=True, debug=True, host='0.0.0.0')

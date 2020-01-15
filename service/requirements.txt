@@ -2,4 +2,4 @@ Flask
 requests
 # requests_ntlm
 xlrd
-
+sesamutils
