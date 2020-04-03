@@ -1,2 +1,5 @@
 .idea/*
 service/.idea/*
+venv/
+__pycache__
+env*
