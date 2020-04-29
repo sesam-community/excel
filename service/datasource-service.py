@@ -4,19 +4,19 @@ import xlrd
 import json
 import os
 import requests
-# from requests_ntlm import HttpNtlmAuth
-# from requests.auth import HTTPBasicAuth
-# from requests.auth import HTTPDigestAuth
 
 import logging
 import threading
 import datetime
 
+from sesamutils.flask import serve
+from sesamutils import sesam_logger
+
 app = Flask(__name__)
 config = {}
 config_since = None
 
-logger = None
+logger = sesam_logger('excel-datasource-service', app=app)
 
 _lock_config = threading.Lock()
 
@@ -41,7 +41,7 @@ def getRowNames(sheet,names,start):
 
 
 
-def getRowData(row, columnNames, start, ids, idx, lastmod, datemode):
+def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
     rowData = {}
     counter = 0
     id = None
@@ -56,11 +56,11 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode):
             value = to_transit_cell(cell, datemode)
             rowData[columnNames[counter - start]] = value
         counter += 1
-    rowData["_id"] = id or str(idx+1)
+    rowData["_id"] = id_prefix + (id or str(idx+1))
     rowData["_updated"] = lastmod
     return rowData
 
-def getColData(col, rowNames, start, ids, idx, lastmod, datemode):
+def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
     colData = {}
     counter = 0
     id = None
@@ -77,13 +77,12 @@ def getColData(col, rowNames, start, ids, idx, lastmod, datemode):
 
 
         counter += 1
-    colData["_id"] = id or str(idx)+1
+    colData["_id"] =  id_prefix + (id or str(idx+1))
     colData["_updated"] = lastmod
     return colData
 
 
 def to_transit_cell(cell, datemode):
-    logger.info("Cell type : %s" % (cell.ctype))
     value = None
     if cell.ctype in [1]:
         value = cell.value
@@ -94,43 +93,51 @@ def to_transit_cell(cell, datemode):
         py_date = datetime.datetime(year, month, day, hour, minute, second)
         value = to_transit_datetime(py_date)
     if cell.ctype == 4:
-        logger.info("Cell type Boolean with value: %s" % (cell.value))
+        logger.debug("Cell type Boolean with value: %s" % (cell.value))
         if cell.value == 1:
             value = True
         elif cell.value == 0:
             value = False
     return value
 
+def stream_as_json(generator_function):
+    """
+    Stream list of objects as JSON array
+    :param generator_function:
+    :return:
+    """
+    first = True
 
-def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode):
+    yield '['
+
+    for item in generator_function:
+        if not first:
+            yield ','
+        else:
+            first = False
+        yield json.dumps(item)
+
+    yield ']'
+
+def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode, id_prefix):
     nRows = sheet.nrows
-    sheetData = []
-
     for idx in range(start[1], nRows):
         row = sheet.row(idx)
-        rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode)
-        sheetData.append(rowData)
+        rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode, id_prefix)
+        yield rowData
 
-    return sheetData
-
-def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode):
+def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode, id_prefix):
     nCols = sheet.row_len(start[0])
-    sheetData = []
-
     for idx in range(start[0], nCols):
         col = sheet.col(idx)
-        colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode)
-        sheetData.append(colData)
-
-    return sheetData
+        colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode, id_prefix)
+        yield colData
 
 def get_var(var):
-    envvar = None
-    if var.upper() in os.environ:
-        envvar = os.environ[var.upper()]
-    else:
-        envvar = request.args.get(var)
-    logger.info("Setting %s = %s" % (var, envvar))
+    envvar = request.args.get(var)
+    if not envvar:
+        envvar = os.getenv(var.upper()) or os.getenv(var.upper())
+    logger.debug("Setting %s = %s" % (var, envvar))
     return envvar
 
 def authenticate():
@@ -155,12 +162,54 @@ def requires_auth(f):
 
     return decorated
 
+def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,since):
+    logger.info("downloading from url=%s with params=%s" % (url, params))
+    r = requests.get(url, auth=auth, headers=headers, params=params)
+    r.raise_for_status()
+    logger.debug("Got file data")
+    workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
+    if workbook.props["modified"] > since:
+        iterable_sheets = sheets or range(0,Workbook.nsheets)
+        for sheet_index in iterable_sheets:
+            worksheet = workbook.sheet_by_index(sheet_index)
+            id_prefix = str(sheet_index+1) + "-" if len(iterable_sheets)>1 else ""
+            if direction == "row":
+                columnNames = getColNames(worksheet, names, start)
+                yield from getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
+            else:
+                rowNames = getRowNames(worksheet, names, start)
+                yield from getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
 
-@app.route('/')
+@app.route('/', methods=["GET"])
+@app.route('/bypath/<path:path>', methods=["GET"])
 @requires_auth
-def get_entities():
-    file = get_var('file')
-    sheet = int(get_var('sheet') or 1) - 1
+def get_entities(path=None):
+    url = get_var('file')
+    file = url
+    headers, params, auth = None , None, None
+    if not url:
+        download_request_spec = get_var('download_request_spec')
+        if download_request_spec:
+            download_request_spec = json.loads(download_request_spec)
+            base_url = download_request_spec.get('base_url')
+            headers = download_request_spec.get('headers')
+            params = download_request_spec.get('params')
+            auth = request.authorization
+            if base_url:
+                url = base_url
+                if path or request.args.get('path'):
+                    path_to_append = (path or request.args.get('path') or "")
+                    path_to_append = path_to_append[1:] if path_to_append[0] == '/' else path_to_append
+                    url = url[:-1] if url[-1] == '/' else url
+                    url += '/' + path_to_append
+                service_variables = ['file','sheet', 'ids','names','direction','start','since','do_stream', 'limit', 'path']
+                for k,v in request.args.items():
+                    if k not in service_variables:
+                        params[k] = v
+    if not url:
+        abort(400, 'cannot figure out url to the file')
+    sheet = get_var('sheet') or '1'
+    sheets = [int(x)-1 for x in sheet.split(',')]
     ids = get_var('ids') or "0"
     ids = [int(x)-1 for x in ids.split(',')]
     names = get_var('names') or "1"
@@ -172,56 +221,24 @@ def get_entities():
     elif not start:
         start = "2,1"
     start = [int(x)-1 for x in start.split(',')]
-    logger.info("Get %s using request: %s" % (file, request.url))
     since = request.args.get('since') or "0001-01-01"
-
-    request_auth = None
-    auth_method = get_var('auth') or "none"
-
-    # if auth_method != "none":
-    #     auth = request.authorization
-    #     if auth_method == "ntlm":
-    #         request_auth = HttpNtlmAuth(auth.username, auth.password)
-    #     elif auth_method == "basic":
-    #         request_auth = HTTPBasicAuth(auth.username, auth.password)
-    #     elif auth_method == "digest":
-    #         request_auth = HTTPDigestAuth(auth.username, auth.password)
-
+    do_stream = get_var('do_stream') or 'true'
+    do_stream = do_stream.lower() == 'true'
     try:
-        logger.info("Reading entities...")
-
-        logger.info("Reading file: %s" % (file))
-        r = requests.get(file, auth=request_auth)
-        r.raise_for_status()
-        logger.debug("Got file data")
-        workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
-        sheetdata = []
-        if workbook.props["modified"] > since:
-            worksheet = workbook.sheet_by_index(sheet)
-            if direction == "row":
-                columnNames = getColNames(worksheet, names, start)
-                sheetdata = getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode)
-            else:
-                rowNames = getRowNames(worksheet, names, start)
-                sheetdata = getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode)
-
-        return Response(json.dumps(sheetdata), mimetype='application/json')
+        response_data = []
+        response_data_generator = stream_as_json(generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,since))
+        if do_stream:
+            response_data = response_data_generator
+        else:
+            for entity in response_data_generator:
+                response_data.append(entity)
+        return Response(response=response_data, mimetype='application/json')
 
     except BaseException as e:
-        logger.exception("Failed to read entities!")
-        return Response(status=500, response="An error occured during generation of entities: %s" )
+        logger.error("Failed to read entities!")
+        logger.exception(e)
+        return Response(status=500, response=str(e))
 
 
 if __name__ == '__main__':
-    # Set up logging
-    format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logger = logging.getLogger('sharepoint-microservice')
-
-    # Log to stdout
-    stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(logging.Formatter(format_string))
-    logger.addHandler(stdout_handler)
-
-    logger.setLevel(logging.DEBUG)
-
-    app.run(threaded=True, debug=True, host='0.0.0.0')
+    serve(app, port=int(os.environ.get('PORT',"5000")))
