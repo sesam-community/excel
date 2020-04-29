@@ -181,12 +181,11 @@ def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,
                 yield from getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
 
 @app.route('/', methods=["GET"])
-@app.route('/<path:path>', methods=["GET"])
+@app.route('/bypath/<path:path>', methods=["GET"])
 @requires_auth
 def get_entities(path=None):
     url = get_var('file')
     file = url
-    logger.debug(f'path={path}')
     headers, params, auth = None , None, None
     if not url:
         download_request_spec = get_var('download_request_spec')
@@ -199,8 +198,11 @@ def get_entities(path=None):
             if base_url:
                 url = base_url
                 if path or request.args.get('path'):
-                    url += '/' + (path or request.args.get('path') or "")
-                service_variables = ['file','sheet', 'ids','names','direction','start','since','do_stream', 'limit']
+                    path_to_append = (path or request.args.get('path') or "")
+                    path_to_append = path_to_append[1:] if path_to_append[0] == '/' else path_to_append
+                    url = url[:-1] if url[-1] == '/' else url
+                    url += '/' + path_to_append
+                service_variables = ['file','sheet', 'ids','names','direction','start','since','do_stream', 'limit', 'path']
                 for k,v in request.args.items():
                     if k not in service_variables:
                         params[k] = v

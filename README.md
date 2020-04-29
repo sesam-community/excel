@@ -3,6 +3,12 @@ Sample Excel REST datasource for Sesam
 
 [![Build Status](https://travis-ci.org/sesam-community/excel.svg?branch=master)](https://travis-ci.org/sesam-community/excel)
 
+### app routes
+| route        | METHOD           | DEFAULT_VALUE|
+| -------------------|---------------------|:-----------------------:|
+| "/bypath/<path:path>" | GET |to be used when you want to use _iii_ in "How to specify file URL" section below |
+| "/" | GET | to be used otherwise  |
+
 
 ### Service parameters:
 
@@ -31,8 +37,8 @@ Sample Excel REST datasource for Sesam
 | -------------------|---------------------|:------------:|:-----------:|
 | path | string of url path,optionally with query params, that will be appended to download_request_spec.base_url to constitute the final url| no | n/a |
 
-## Notes
-* Url to the file is figured out by _i)_ _FILE_ env var, _ii)_ _FILE_ query param, _iii)_ _DOWNLOAD_REQUEST_SPEC_ env var combine with the path in the request to the service or _iv)_ DOWNLOAD_REQUEST_SPEC_ env var combine with the _path_ query param.
+## How to specify file URL
+* Url to the file is figured out by _i)_ _FILE_ env var, _ii)_ _FILE_ query param, _iii)_ _DOWNLOAD_REQUEST_SPEC_.base_url env var combined with the path in the request to the service or _iv)_ DOWNLOAD_REQUEST_SPEC_.base_url env var combined with the _path_ query param.
 
 ## Example setups:
 
@@ -66,7 +72,7 @@ pipe:
     {
       "type": "json",
       "system": "myexceldatasource",
-      "url": "/mypath1/myexcelfile.xlsx?sheet=1&direction=col&do_stream=true&my_queryparam_specific_to_this_request=somevalue"
+      "url": "/bypath/mypath1/myexcelfile.xlsx?sheet=1&direction=col&do_stream=true&my_queryparam_specific_to_this_request=somevalue"
     },
 ...
 ```
