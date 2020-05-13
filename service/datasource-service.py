@@ -181,7 +181,7 @@ def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,
                 yield from getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
 
 @app.route('/', methods=["GET"])
-@app.route('/bypath/<path:path>', methods=["GET"])
+@app.route('/<path:path>', methods=["GET"])
 @requires_auth
 def get_entities(path=None):
     url = get_var('file')
