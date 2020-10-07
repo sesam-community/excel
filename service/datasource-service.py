@@ -57,7 +57,8 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
             rowData[columnNames[counter - start]] = value
         counter += 1
     rowData["_id"] = id_prefix + (id or str(idx+1))
-    rowData["_updated"] = lastmod
+    if lastmod:
+        rowData["_updated"] = lastmod
     return rowData
 
 def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
@@ -78,7 +79,8 @@ def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
 
         counter += 1
     colData["_id"] =  id_prefix + (id or str(idx+1))
-    colData["_updated"] = lastmod
+    if lastmod:
+        colData["_updated"] = lastmod
     return colData
 
 
@@ -168,17 +170,22 @@ def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,
     r.raise_for_status()
     logger.debug("Got file data")
     workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
-    if workbook.props["modified"] > since:
-        iterable_sheets = sheets or range(0,Workbook.nsheets)
+
+    modified = "modified" in workbook.props
+    if modified:
+        modified = workbook.props["modified"]
+
+    if not modified or modified > since:
+        iterable_sheets = sheets or range(0, workbook.nsheets)
         for sheet_index in iterable_sheets:
             worksheet = workbook.sheet_by_index(sheet_index)
             id_prefix = str(sheet_index+1) + "-" if len(iterable_sheets)>1 else ""
             if direction == "row":
                 columnNames = getColNames(worksheet, names, start)
-                yield from getSheetRowData(worksheet, columnNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
+                yield from getSheetRowData(worksheet, columnNames, start, ids, modified, workbook.datemode, id_prefix)
             else:
                 rowNames = getRowNames(worksheet, names, start)
-                yield from getSheetColData(worksheet, rowNames, start, ids, workbook.props["modified"], workbook.datemode, id_prefix)
+                yield from getSheetColData(worksheet, rowNames, start, ids, modified, workbook.datemode, id_prefix)
 
 @app.route('/', methods=["GET"])
 @app.route('/bypath/<path:path>', methods=["GET"])
