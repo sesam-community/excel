@@ -49,7 +49,10 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
     for cell in row:
         if counter in ids:
             if id:
-                id = id + "-" + str(cell.value, datemode)
+                if isinstance(datemode, int):
+                    id = id + "-" + str(cell.value)
+                else:
+                    id = id + "-" + str(cell.value, datemode)
             else:
                 id = str(cell.value)
         if counter>=start:
