@@ -8,6 +8,7 @@ import requests
 import logging
 import threading
 import datetime
+import base64
 
 from sesamutils.flask import serve
 from sesamutils import sesam_logger
@@ -40,7 +41,6 @@ def getRowNames(sheet,names,start):
     return  ['-'.join(row) for row in map(lambda *a: list(a), *colValues)]
 
 
-
 def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
     rowData = {}
     counter = 0
@@ -63,6 +63,7 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
     if lastmod:
         rowData["_updated"] = lastmod
     return rowData
+
 
 def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
     colData = {}
@@ -105,6 +106,7 @@ def to_transit_cell(cell, datemode):
             value = False
     return value
 
+
 def stream_as_json(generator_function):
     """
     Stream list of objects as JSON array
@@ -124,12 +126,14 @@ def stream_as_json(generator_function):
 
     yield ']'
 
+
 def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode, id_prefix):
     nRows = sheet.nrows
     for idx in range(start[1], nRows):
         row = sheet.row(idx)
         rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode, id_prefix)
         yield rowData
+
 
 def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode, id_prefix):
     nCols = sheet.row_len(start[0])
@@ -138,12 +142,14 @@ def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode, id_prefix):
         colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode, id_prefix)
         yield colData
 
+
 def get_var(var):
     envvar = request.args.get(var)
     if not envvar:
         envvar = os.getenv(var.upper()) or os.getenv(var.upper())
     logger.debug("Setting %s = %s" % (var, envvar))
     return envvar
+
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""
@@ -167,6 +173,7 @@ def requires_auth(f):
 
     return decorated
 
+
 def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,since):
     logger.info("downloading from url=%s with params=%s" % (url, params))
     r = requests.get(url, auth=auth, headers=headers, params=params)
@@ -189,6 +196,40 @@ def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,
             else:
                 rowNames = getRowNames(worksheet, names, start)
                 yield from getSheetColData(worksheet, rowNames, start, ids, modified, workbook.datemode, id_prefix)
+
+# change to POST method later
+@app.route('/transform')
+def receiver():
+    # Change back to this later:
+    #encoded_bytes = request.json["content"]
+    #decoded = base64.b64decode(encoded_bytes)
+
+    # For testing:
+    entities = requests.get("http://localhost:5000/entities").json()
+    decoded = base64.b64decode(entities["content"])
+
+    with open('tmp.xsls', 'wb') as excel_file:
+        excel_file.write(decoded)
+        excel_file.close()
+
+    workbook = xlrd.open_workbook('tmp.xsls')
+
+    """
+    def generate(entities):
+        yield "["
+        for index, entity in enumerate(entities):
+            if index > 0:
+                yield ","
+            entity["message"] = "Hello world!"
+            yield json.dumps(entity)
+        yield "]"
+
+    # get entities from request
+    entities = request.get_json()
+    """
+
+    # return Response(generate(entities), mimetype='application/json')
+
 
 @app.route('/', methods=["GET"])
 @app.route('/bypath/<path:path>', methods=["GET"])
@@ -251,4 +292,4 @@ def get_entities(path=None):
 
 
 if __name__ == '__main__':
-    serve(app, port=int(os.environ.get('PORT',"5000")))
+    serve(app, port=int(os.environ.get('PORT', "5001")))
