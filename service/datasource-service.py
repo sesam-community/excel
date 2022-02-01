@@ -14,7 +14,6 @@ from sesamutils.flask import serve
 from sesamutils import sesam_logger
 
 app = Flask(__name__)
-config = {}
 config_since = None
 
 logger = sesam_logger('excel-datasource-service', app=app)
@@ -30,19 +29,19 @@ def to_transit_datetime(dt_int):
     return "~t" + datetime_format(dt_int)
 
 
-def getColNames(sheet,names,start):
-    rowSize = max([sheet.row_len(rowstart) for rowstart in names])
-    rowValues = [sheet.row_values(x, start[0], rowSize) for x in names]
-    return  ['-'.join(row) for row in map(lambda *a: list(a), *rowValues)]
+def get_col_names(sheet,names,start):
+    row_size = max([sheet.row_len(rowstart) for rowstart in names])
+    row_values = [sheet.row_values(x, start[0], row_size) for x in names]
+    return ['-'.join(row) for row in map(lambda *a: list(a), *row_values)]
 
 
-def getRowNames(sheet,names,start):
-    colValues = [sheet.col_values(x, start[1], sheet.nrows) for x in names]
-    return  ['-'.join(row) for row in map(lambda *a: list(a), *colValues)]
+def get_row_names(sheet,names,start):
+    col_values = [sheet.col_values(x, start[1], sheet.nrows) for x in names]
+    return ['-'.join(row) for row in map(lambda *a: list(a), *col_values)]
 
 
-def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
-    rowData = {}
+def get_row_data(row, column_names, start, ids, idx, lastmod, datemode, id_prefix):
+    row_data = {}
     counter = 0
     id = None
 
@@ -55,18 +54,19 @@ def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
                     id = id + "-" + str(cell.value, datemode)
             else:
                 id = str(cell.value)
-        if counter>=start:
+        if counter >= start:
             value = to_transit_cell(cell, datemode)
-            rowData[columnNames[counter - start]] = value
+            row_data[column_names[counter - start]] = value
         counter += 1
-    rowData["_id"] = id_prefix + (id or str(idx+1))
+
+    row_data["_id"] = id_prefix + (id or str(idx+1))
     if lastmod:
-        rowData["_updated"] = lastmod
-    return rowData
+        row_data["_updated"] = lastmod
+    return row_data
 
 
-def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
-    colData = {}
+def get_col_data(col, row_names, start, ids, idx, lastmod, datemode, id_prefix):
+    col_data = {}
     counter = 0
     id = None
 
@@ -78,14 +78,14 @@ def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
                 id = str(cell.value)
         if counter>=start:
             value = to_transit_cell(cell, datemode)
-            colData[rowNames[counter - start]] = value
-
+            col_data[row_names[counter - start]] = value
 
         counter += 1
-    colData["_id"] =  id_prefix + (id or str(idx+1))
+
+    col_data["_id"] =  id_prefix + (id or str(idx+1))
     if lastmod:
-        colData["_updated"] = lastmod
-    return colData
+        col_data["_updated"] = lastmod
+    return col_data
 
 
 def to_transit_cell(cell, datemode):
@@ -99,7 +99,7 @@ def to_transit_cell(cell, datemode):
         py_date = datetime.datetime(year, month, day, hour, minute, second)
         value = to_transit_datetime(py_date)
     if cell.ctype == 4:
-        logger.debug("Cell type Boolean with value: %s" % (cell.value))
+        logger.debug("Cell type Boolean with value: %s" % cell.value)
         if cell.value == 1:
             value = True
         elif cell.value == 0:
@@ -127,20 +127,26 @@ def stream_as_json(generator_function):
     yield ']'
 
 
-def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode, id_prefix):
-    nRows = sheet.nrows
-    for idx in range(start[1], nRows):
+def get_sheet_row_data(sheet, column_names, start, ids, lastmod, datemode, id_prefix):
+    nrows = sheet.nrows
+    for idx in range(start[1], nrows):
         row = sheet.row(idx)
-        rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode, id_prefix)
-        yield rowData
+        row_data = get_row_data(row, column_names, start[0], ids, idx, lastmod, datemode, id_prefix)
+        yield row_data
 
 
-def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode, id_prefix):
-    nCols = sheet.row_len(start[0])
-    for idx in range(start[0], nCols):
+def get_sheet_col_data(sheet, row_names, start, ids, lastmod, datemode, id_prefix):
+    ncols = sheet.row_len(start[0])
+    for idx in range(start[0], ncols):
         col = sheet.col(idx)
-        colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode, id_prefix)
-        yield colData
+        col_data = get_col_data(col, row_names, start[1], ids, idx, lastmod, datemode, id_prefix)
+        yield col_data
+
+
+def get_envvar(var):
+    envvar = os.getenv(var.upper()) or os.getenv(var.upper())
+    logger.debug("Setting %s = %s" % (var, envvar))
+    return envvar
 
 
 def get_var(var):
@@ -174,14 +180,25 @@ def requires_auth(f):
     return decorated
 
 
-def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,since):
-    logger.info("downloading from url=%s with params=%s" % (url, params))
-    r = requests.get(url, auth=auth, headers=headers, params=params)
-    r.raise_for_status()
-    logger.debug("Got file data")
-    workbook = xlrd.open_workbook("sesm.xsls", file_contents=r.content)
+def generate_sheetdata(workbook, vars):
+    sheet = vars.get('sheet', get_envvar('sheet')) or '1'
+    sheets = [int(x) - 1 for x in sheet.split(',')]
+    ids = vars.get('ids', get_envvar('ids')) or "0"
+    ids = [int(x) - 1 for x in ids.split(',')]
+    names = vars.get('names', get_envvar('names')) or "1"
+    names = [int(x) - 1 for x in names.split(',')]
+    direction = vars.get('direction', get_envvar('direction')) or "row"
+    start = vars.get('start', get_envvar('start'))
+    since = vars.get('since', "0001-01-01")
 
+    if not start and direction == "row":
+        start = "1,2"
+    elif not start:
+        start = "2,1"
+
+    start = [int(x) - 1 for x in start.split(',')]
     modified = "modified" in workbook.props
+
     if modified:
         modified = workbook.props["modified"]
 
@@ -189,46 +206,43 @@ def generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,
         iterable_sheets = sheets or range(0, workbook.nsheets)
         for sheet_index in iterable_sheets:
             worksheet = workbook.sheet_by_index(sheet_index)
-            id_prefix = str(sheet_index+1) + "-" if len(iterable_sheets)>1 else ""
+            id_prefix = str(sheet_index+1) + "-" if len(iterable_sheets) > 1 else ""
             if direction == "row":
-                columnNames = getColNames(worksheet, names, start)
-                yield from getSheetRowData(worksheet, columnNames, start, ids, modified, workbook.datemode, id_prefix)
+                column_names = get_col_names(worksheet, names, start)
+                yield from get_sheet_row_data(worksheet, column_names, start, ids, modified, workbook.datemode, id_prefix)
             else:
-                rowNames = getRowNames(worksheet, names, start)
-                yield from getSheetColData(worksheet, rowNames, start, ids, modified, workbook.datemode, id_prefix)
+                row_names = get_row_names(worksheet, names, start)
+                yield from get_sheet_col_data(worksheet, row_names, start, ids, modified, workbook.datemode, id_prefix)
 
-# change to POST method later
-@app.route('/transform')
+
+@app.route('/transform')    # add POST after done testing
 def receiver():
-    # Change back to this later:
-    #encoded_bytes = request.json["content"]
-    #decoded = base64.b64decode(encoded_bytes)
-
-    # For testing:
+    # For testing with source running locally:
     entities = requests.get("http://localhost:5000/entities").json()
     decoded = base64.b64decode(entities["content"])
 
-    with open('tmp.xsls', 'wb') as excel_file:
-        excel_file.write(decoded)
-        excel_file.close()
+    # encoded_bytes = request.json["content"]
+    # decoded = base64.b64decode(encoded_bytes)
 
-    workbook = xlrd.open_workbook('tmp.xsls')
+    vars = request.args
+    do_stream = vars.get('do_stream', get_envvar('do_stream')) or 'true'
+    do_stream = do_stream.lower() == 'true'
 
-    """
-    def generate(entities):
-        yield "["
-        for index, entity in enumerate(entities):
-            if index > 0:
-                yield ","
-            entity["message"] = "Hello world!"
-            yield json.dumps(entity)
-        yield "]"
+    workbook = xlrd.open_workbook('sesam.xsls', file_contents=decoded)
+    try:
+        response_data = []
+        response_data_generator = stream_as_json(generate_sheetdata(workbook, vars))
+        if do_stream:
+            response_data = response_data_generator
+        else:
+            for entity in response_data_generator:
+                response_data.append(entity)
+        return Response(response=response_data, mimetype='application/json')
 
-    # get entities from request
-    entities = request.get_json()
-    """
-
-    # return Response(generate(entities), mimetype='application/json')
+    except BaseException as e:
+        logger.error("Failed to read entities!")
+        logger.exception(e)
+        return Response(status=500, response=str(e))
 
 
 @app.route('/', methods=["GET"])
@@ -236,8 +250,7 @@ def receiver():
 @requires_auth
 def get_entities(path=None):
     url = get_var('file')
-    file = url
-    headers, params, auth = None , None, None
+    headers, params, auth = None, None, None
     if not url:
         download_request_spec = get_var('download_request_spec')
         if download_request_spec:
@@ -254,30 +267,25 @@ def get_entities(path=None):
                     url = url[:-1] if url[-1] == '/' else url
                     url += '/' + path_to_append
                 service_variables = ['file','sheet', 'ids','names','direction','start','since','do_stream', 'limit', 'path']
-                for k,v in request.args.items():
+                for k, v in request.args.items():
                     if k not in service_variables:
                         params[k] = v
     if not url:
         abort(400, 'cannot figure out url to the file')
-    sheet = get_var('sheet') or '1'
-    sheets = [int(x)-1 for x in sheet.split(',')]
-    ids = get_var('ids') or "0"
-    ids = [int(x)-1 for x in ids.split(',')]
-    names = get_var('names') or "1"
-    names = [int(x)-1 for x in names.split(',')]
-    direction = get_var('direction') or "row"
-    start = get_var('start')
-    if not start and direction=="row":
-        start="1,2"
-    elif not start:
-        start = "2,1"
-    start = [int(x)-1 for x in start.split(',')]
-    since = request.args.get('since') or "0001-01-01"
-    do_stream = get_var('do_stream') or 'true'
+
+    logger.info("downloading from url=%s with params=%s" % (url, params))
+    r = requests.get(url, auth=auth, headers=headers, params=params)
+    r.raise_for_status()
+    logger.debug("Got file data")
+    workbook = xlrd.open_workbook("sesam.xsls", file_contents=r.content)
+
+    vars = request.args
+    do_stream = vars.get('do_stream', get_envvar('do_stream')) or 'true'
     do_stream = do_stream.lower() == 'true'
+
     try:
         response_data = []
-        response_data_generator = stream_as_json(generate_sheetdata(url,auth,params,headers,sheets,ids,names,direction,start,since))
+        response_data_generator = stream_as_json(generate_sheetdata(workbook, vars))
         if do_stream:
             response_data = response_data_generator
         else:
