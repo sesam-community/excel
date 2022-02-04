@@ -28,19 +28,19 @@ def to_transit_datetime(dt_int):
     return "~t" + datetime_format(dt_int)
 
 
-def get_col_names(sheet,names,start):
-    row_size = max([sheet.row_len(rowstart) for rowstart in names])
-    row_values = [sheet.row_values(x, start[0], row_size) for x in names]
-    return ['-'.join(row) for row in map(lambda *a: list(a), *row_values)]
+def getColNames(sheet,names,start):
+    rowSize = max([sheet.row_len(rowstart) for rowstart in names])
+    rowValues = [sheet.row_values(x, start[0], rowSize) for x in names]
+    return  ['-'.join(row) for row in map(lambda *a: list(a), *rowValues)]
 
 
-def get_row_names(sheet,names,start):
-    col_values = [sheet.col_values(x, start[1], sheet.nrows) for x in names]
-    return ['-'.join(row) for row in map(lambda *a: list(a), *col_values)]
+def getRowNames(sheet,names,start):
+    colValues = [sheet.col_values(x, start[1], sheet.nrows) for x in names]
+    return  ['-'.join(row) for row in map(lambda *a: list(a), *colValues)]
 
 
-def get_row_data(row, column_names, start, ids, idx, lastmod, datemode, id_prefix):
-    row_data = {}
+def getRowData(row, columnNames, start, ids, idx, lastmod, datemode, id_prefix):
+    rowData = {}
     counter = 0
     id = None
 
@@ -53,19 +53,18 @@ def get_row_data(row, column_names, start, ids, idx, lastmod, datemode, id_prefi
                     id = id + "-" + str(cell.value, datemode)
             else:
                 id = str(cell.value)
-        if counter >= start:
+        if counter>=start:
             value = to_transit_cell(cell, datemode)
-            row_data[column_names[counter - start]] = value
+            rowData[columnNames[counter - start]] = value
         counter += 1
-
-    row_data["_id"] = id_prefix + (id or str(idx+1))
+    rowData["_id"] = id_prefix + (id or str(idx+1))
     if lastmod:
-        row_data["_updated"] = lastmod
-    return row_data
+        rowData["_updated"] = lastmod
+    return rowData
 
 
-def get_col_data(col, row_names, start, ids, idx, lastmod, datemode, id_prefix):
-    col_data = {}
+def getColData(col, rowNames, start, ids, idx, lastmod, datemode, id_prefix):
+    colData = {}
     counter = 0
     id = None
 
@@ -77,14 +76,14 @@ def get_col_data(col, row_names, start, ids, idx, lastmod, datemode, id_prefix):
                 id = str(cell.value)
         if counter>=start:
             value = to_transit_cell(cell, datemode)
-            col_data[row_names[counter - start]] = value
+            colData[rowNames[counter - start]] = value
+
 
         counter += 1
-
-    col_data["_id"] =  id_prefix + (id or str(idx+1))
+    colData["_id"] =  id_prefix + (id or str(idx+1))
     if lastmod:
-        col_data["_updated"] = lastmod
-    return col_data
+        colData["_updated"] = lastmod
+    return colData
 
 
 def to_transit_cell(cell, datemode):
@@ -126,32 +125,23 @@ def stream_as_json(generator_function):
     yield ']'
 
 
-def get_sheet_row_data(sheet, column_names, start, ids, lastmod, datemode, id_prefix):
-    nrows = sheet.nrows
-    for idx in range(start[1], nrows):
+def getSheetRowData(sheet, columnNames, start, ids, lastmod, datemode, id_prefix):
+    nRows = sheet.nrows
+    for idx in range(start[1], nRows):
         row = sheet.row(idx)
-        row_data = get_row_data(row, column_names, start[0], ids, idx, lastmod, datemode, id_prefix)
-        yield row_data
+        rowData = getRowData(row, columnNames, start[0], ids, idx, lastmod, datemode, id_prefix)
+        yield rowData
 
-
-def get_sheet_col_data(sheet, row_names, start, ids, lastmod, datemode, id_prefix):
-    ncols = sheet.row_len(start[0])
-    for idx in range(start[0], ncols):
+def getSheetColData(sheet, rowNames, start, ids, lastmod, datemode, id_prefix):
+    nCols = sheet.row_len(start[0])
+    for idx in range(start[0], nCols):
         col = sheet.col(idx)
-        col_data = get_col_data(col, row_names, start[1], ids, idx, lastmod, datemode, id_prefix)
-        yield col_data
+        colData = getColData(col, rowNames, start[1], ids, idx, lastmod, datemode, id_prefix)
+        yield colData
 
 
 def get_envvar(var):
     envvar = os.getenv(var.upper()) or os.getenv(var.upper())
-    logger.debug("Setting %s = %s" % (var, envvar))
-    return envvar
-
-
-def get_var(var):
-    envvar = request.args.get(var)
-    if not envvar:
-        envvar = os.getenv(var.upper()) or os.getenv(var.upper())
     logger.debug("Setting %s = %s" % (var, envvar))
     return envvar
 
@@ -167,7 +157,8 @@ def authenticate():
 def requires_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_method = get_var('auth') or "none"
+        auth_method = request.args.get("auth", get_envvar('auth')) or "none"
+
         if auth_method != "none":
             auth = request.authorization
             if not auth:
@@ -207,11 +198,11 @@ def generate_sheetdata(workbook, vars):
             worksheet = workbook.sheet_by_index(sheet_index)
             id_prefix = str(sheet_index+1) + "-" if len(iterable_sheets) > 1 else ""
             if direction == "row":
-                column_names = get_col_names(worksheet, names, start)
-                yield from get_sheet_row_data(worksheet, column_names, start, ids, modified, workbook.datemode, id_prefix)
+                column_names = getColNames(worksheet, names, start)
+                yield from getSheetRowData(worksheet, column_names, start, ids, modified, workbook.datemode, id_prefix)
             else:
-                row_names = get_row_names(worksheet, names, start)
-                yield from get_sheet_col_data(worksheet, row_names, start, ids, modified, workbook.datemode, id_prefix)
+                row_names = getRowNames(worksheet, names, start)
+                yield from getSheetColData(worksheet, row_names, start, ids, modified, workbook.datemode, id_prefix)
 
 
 def extract_content(entity):
@@ -276,10 +267,11 @@ def receiver():
 @app.route('/bypath/<path:path>', methods=["GET"])
 @requires_auth
 def get_entities(path=None):
-    url = get_var('file')
+    vars = request.args
+    url = vars.get('file', get_envvar('file'))
     headers, params, auth = None, None, None
     if not url:
-        download_request_spec = get_var('download_request_spec')
+        download_request_spec = vars.get('download_request_spec', get_envvar('download_request_spec'))
         if download_request_spec:
             download_request_spec = json.loads(download_request_spec)
             base_url = download_request_spec.get('base_url')
@@ -306,7 +298,6 @@ def get_entities(path=None):
     logger.debug("Got file data")
     workbook = xlrd.open_workbook("sesam.xsls", file_contents=r.content)
 
-    vars = request.args
     do_stream = vars.get('do_stream', get_envvar('do_stream')) or 'true'
     do_stream = do_stream.lower() == 'true'
 
