@@ -4,7 +4,6 @@ import xlrd
 import json
 import os
 import requests
-
 import logging
 import threading
 import datetime
@@ -215,14 +214,42 @@ def generate_sheetdata(workbook, vars):
                 yield from get_sheet_col_data(worksheet, row_names, start, ids, modified, workbook.datemode, id_prefix)
 
 
-@app.route('/transform')    # add POST after done testing
-def receiver():
-    # For testing with source running locally:
-    entities = requests.get("http://localhost:5000/entities").json()
-    decoded = base64.b64decode(entities["content"])
+def extract_content(entity):
+    """
+    Given an entity, attempt to find "content" (encoded bytes) and "content-type" (Mime type of file).
+    """
 
-    # encoded_bytes = request.json["content"]
-    # decoded = base64.b64decode(encoded_bytes)
+    content = None
+    content_type = None
+
+    for key in entity.keys():
+        if "content" in key.split(":"):
+            content = entity[key]
+        if "content-type" in key.split(":"):
+            content_type = entity[key]
+
+    return content, content_type
+
+
+@app.route('/transform', methods=["POST"])
+def receiver():
+    """
+    Decode encoded bytes from a POST request back into an Excel sheet and return as a JSON.
+    """
+
+    valid_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    encoded_bytes, file_type = extract_content(request.json[0])
+
+    if file_type != valid_type:
+        logger.warning("Content type does not match that of an Excel sheet: got '%s', expected '%s'."
+                       "Decoded content may not be correct." % (file_type, valid_type))
+
+    if encoded_bytes is None:
+        return Response(status=404, response="Unable to extract content. Incoming POST request must contain a single "
+                                             "entity with a field on the form 'namespace:content': '<encoded bytes>'")
+
+    decoded = base64.b64decode(encoded_bytes)
 
     vars = request.args
     do_stream = vars.get('do_stream', get_envvar('do_stream')) or 'true'
@@ -300,4 +327,4 @@ def get_entities(path=None):
 
 
 if __name__ == '__main__':
-    serve(app, port=int(os.environ.get('PORT', "5001")))
+    serve(app, port=int(os.environ.get('PORT', "5000")))

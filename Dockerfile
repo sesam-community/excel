@@ -1,5 +1,5 @@
 FROM python:3-alpine
-MAINTAINER Graham Moore "graham.moore@sesam.io"
+MAINTAINER Hans Erlend Bakken Glad "hans.glad@sesam.io"
 
 WORKDIR /service
 COPY ./service/requirements.txt /service/requirements.txt
