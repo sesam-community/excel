@@ -1,13 +1,14 @@
 # sesam-datasource-excel
-Sample Excel REST datasource for Sesam
+Sample Excel REST datasource for Sesam. Can also be used as a transform.
 
 [![Build Status](https://travis-ci.org/sesam-community/excel.svg?branch=master)](https://travis-ci.org/sesam-community/excel)
 
 ### app routes
-| route        | METHOD           | DEFAULT_VALUE|
-| -------------------|---------------------|:-----------------------:|
-| "/bypath/<path:path>" | GET |to be used when you want to use _iii_ in "How to specify file URL" section below |
-| "/" | GET | to be used otherwise  |
+| route        | METHOD           |                                  DEFAULT_VALUE                                   |
+| -------------------|---------------------|:--------------------------------------------------------------------------------:|
+| "/bypath/<path:path>" | GET | to be used when you want to use _iii_ in "How to specify file URL" section below |
+| "/" | GET |                               to be used otherwise                               |
+| "/transform" | POST |                transforms incoming encoded bytes into Excel sheet                |
 
 
 ### Service parameters:
