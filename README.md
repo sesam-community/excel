@@ -43,7 +43,7 @@ Sample Excel REST datasource for Sesam. Can also be used as a transform.
 
 ## Example setups:
 
-system:
+System:
 ```
 {
     "_id": "my_excel_datasource",
@@ -67,7 +67,7 @@ system:
     "read_timeout": 7200
 }
 ```
-pipe:
+Pipe:
 ```
 ...
     {
@@ -77,3 +77,33 @@ pipe:
     },
 ...
 ```
+
+Using as a transform:
+```
+{
+...
+  "source": {
+    "dataset": "pipe-with-encoded-bytes",
+    "type": "dataset"
+  },
+  "transform": {
+    "system": "excel-service",
+    "type": "http",
+    "url": "/transform"
+  },
+  "type": "pipe"
+...
+}
+```
+Here, 'pipe-with-encoded-bytes' is required to be a pipe that outputs a single entity. This entity should contain the
+encoded bytes in a field `contents` and with the following `content-type`:
+
+```
+{
+  "content": "UEsDBBQABgAIAAAAIQAUZrG...sUEsFBgAAAAAMAAwABAMAAJ3EAAAAAA==",
+  "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+}
+```
+
+The [Github service](https://github.com/sesam-community/github-service) outputs entities that can be used as
+inputs to this transform, provided that the content type is correct.
