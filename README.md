@@ -46,7 +46,7 @@ Sample Excel REST datasource for Sesam. Can also be used as a transform.
 System:
 ```
 {
-    "_id": "my_excel_datasource",
+    "_id": "my-excel-datasource",
     "type": "system:microservice",
     "connect_timeout": 60,
     "docker": {
@@ -72,7 +72,7 @@ Pipe:
 ...
     {
       "type": "json",
-      "system": "myexceldatasource",
+      "system": "my-excel-datasource",
       "url": "/bypath/mypath1/myexcelfile.xlsx?sheet=1&direction=col&do_stream=true&my_queryparam_specific_to_this_request=somevalue"
     },
 ...
@@ -87,7 +87,7 @@ Using as a transform:
     "type": "dataset"
   },
   "transform": {
-    "system": "excel-service",
+    "system": "my-excel-datasource",
     "type": "http",
     "url": "/transform"
   },
