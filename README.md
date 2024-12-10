@@ -96,7 +96,7 @@ Using as a transform:
 }
 ```
 Here, 'pipe-with-encoded-bytes' is required to be a pipe that outputs a single entity. This entity should contain the
-encoded bytes in a field `contents` and with the following `content-type`:
+encoded bytes in a field `content` and with the following `content-type`:
 
 ```
 {
